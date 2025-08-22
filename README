@@ -13,8 +13,9 @@ ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
 
 Install
 -------
-To install, run 
-> python setup.py install --user
+To install,
+> cd qspace/
+> pip install .
 
 References
 ----------
