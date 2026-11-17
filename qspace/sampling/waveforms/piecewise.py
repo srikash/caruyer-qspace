@@ -1,13 +1,22 @@
-#!/usr/bin/env python3
-"""Let's refactor the piecewise polynomial basis construction to make it more
-versatile"""
-from scipy.interpolate import (BPoly, PPoly)
+"""Orthonormal bases of piecewise polynomial gradient waveforms.
+
+A gradient waveform is written as a piecewise polynomial in Bernstein form on
+a set of breakpoints. Linear constraints (vanishing ends, continuity of
+derivatives, refocusing symmetry, bounded order) define a subspace; its
+eigen-decomposition gives an orthonormal basis of waveforms. These bases are
+used to generate random waveforms with a target b-tensor, as in Westin et al.
+(2016).
+
+Use the constructors :class:`QPiecewiseConstant`, :class:`QPiecewisePolynomial`
+and :class:`QPiecewiseAffine` for common refocused designs.
+"""
+from collections.abc import Sequence
+
 import numpy as np
 from numpy.testing import assert_almost_equal
-from scipy.linalg import (eigh, null_space)
+from scipy.interpolate import BPoly, PPoly
+from scipy.linalg import eigh, null_space
 from scipy.special import binom
-from matplotlib import pyplot as plt
-from collections.abc import Sequence
 
 
 def _find_nearest(values, value, tol=1.0e-3):
@@ -17,7 +26,7 @@ def _find_nearest(values, value, tol=1.0e-3):
     return nearest
 
 
-gamma = 267.513e6
+from qspace.sampling.waveforms.btensors import GAMMA as gamma  # rad/s/T
 
 class PiecewiseBasis(Sequence):
     """Builds an orthonormal basis of piecewise polynomial functions satisfying
@@ -233,7 +242,7 @@ def _power_to_bernstein(order, interval):
         coefficients = np.zeros((order + 1, 1))
         coefficients[p, 0] = 1
         f = PPoly(coefficients, interval)
-        M[p] = BPoly.from_bernstein_basis(f).c[:, 0]
+        M[p] = BPoly.from_power_basis(f).c[:, 0]
     return M
 
 
@@ -359,7 +368,6 @@ class QPiecewiseAffine(PiecewiseBasis):
         breakpoints.append(breakpoints[-1] + delta_rf)
         for i in range(n2):
             breakpoints.append(delta1 + delta_rf + (i + 1) * dt)
-        nb_breakpoints = len(breakpoints)
         order = 2
         super().__init__(order, breakpoints)
 
@@ -388,7 +396,7 @@ class QPiecewiseAffine(PiecewiseBasis):
 
 
     def __str__(self):
-        return f"QPiecewiseAffine"
+        return "QPiecewiseAffine"
 
 
  

@@ -1,44 +1,57 @@
-####################
-# qspace - mspf.py #
-####################
-# This file contains the implementation of the spherical harmonic basis. #
-##########################################################################
+"""Modified spherical polar Fourier (mSPF) basis.
 
+The mSPF basis is a reparametrisation of the SPF basis that is used to
+reconstruct a continuous q-space signal with Laplace regularization, following
+Caruyer and Deriche (2012). Its radial functions have one fewer order than the
+SPF basis: ``dimension(radial_order, angular_rank)`` uses
+``radial_order - 1`` radial orders.
+
+Reference
+---------
+Caruyer, E., and Deriche, R. (2012). Diffusion MRI signal reconstruction with
+continuity constraint and optimal regularization. Medical Image Analysis
+16(6), 1113-1120.
+"""
 import numpy as np
-from scipy.special import lpmv, gamma, hyp1f1, legendre
-from scipy.special.orthogonal import genlaguerre
-from scipy.misc import factorial
-import sh, spf
+from scipy.special import genlaguerre, gamma, factorial
+
+from . import sh
+from . import spf
 
 
-# default parameters values
+# Default parameter values, shared with the SPF basis.
 _default_radial_order = spf._default_radial_order
 _default_angular_rank = sh._default_rank
 _default_zeta = spf._default_zeta
 
 
 class ModifiedSphericalPolarFourier:
-    """This class implements the modified SPF basis, for the reconstruction of 
-    a continuous function.
+    """A function expressed in the mSPF basis.
 
     Parameters
     ----------
     radial_order : int
-        The radial truncation order of the mSPF basis.
+        Radial truncation order. The basis uses ``radial_order - 1`` radial
+        functions.
     angular_rank : int
-        The truncation rank of the angular part of the mSPF basis.
+        Truncation rank of the angular part (even).
     zeta : float
-        The scale parameter of the mSPF basis.
+        Scale parameter of the basis.
+
+    Attributes
+    ----------
+    coefficients : ndarray, shape (radial_order, sh.dimension(angular_rank))
+        Basis coefficients, indexed as ``coefficients[n, j]``. Only the first
+        ``radial_order - 1`` rows are used.
     """
 
-    def __init__(self, radial_order=_default_radial_order, 
+    def __init__(self, radial_order=_default_radial_order,
                  angular_rank=_default_angular_rank, zeta=_default_zeta):
         self.radial_order = radial_order
         self.angular_rank = angular_rank
         self.zeta = zeta
         self.coefficients = np.zeros((self.radial_order,
                                       sh.dimension(self.angular_rank)))
-
 
     def get_angular_rank(self):
         return self._angular_rank
@@ -48,28 +61,21 @@ class ModifiedSphericalPolarFourier:
             raise ValueError("'angular_rank' only accepts even values.")
         self._angular_rank = value
 
-    angular_rank = property(get_angular_rank, set_angular_rank)
-
+    angular_rank = property(get_angular_rank, set_angular_rank,
+                            doc="Truncation rank of the angular part (even).")
 
     def spherical_function(self, r, theta, phi):
-        """The 3d function represented by the mSPF object.
+        """Evaluate the function at points given in spherical coordinates.
 
         Parameters
         ----------
-        r : array-like, shape (K, )
-            The radii of the points in q-space where to compute the spherical 
-            function.
-        theta : array-like, shape (K, )
-            The polar angles of the points in q-space where to compute the 
-            spherical function.
-        phi : array-like, shape (K, )
-            The azimuthal angles of the points in q-space where to compute the 
-            spherical function.
+        r, theta, phi : array-like, shape (K,)
+            Spherical coordinates of the q-space points.
 
         Returns
         -------
-        f : array-like, shape (K, )
-            The function computed at the points provided as input.
+        f : ndarray, shape (K,)
+            The function value at each point.
         """
         result = 0.0
         for n in range(self.radial_order - 1):
@@ -81,33 +87,25 @@ class ModifiedSphericalPolarFourier:
         return result
 
 
-def matrix(r, theta, phi, radial_order=_default_radial_order, 
+def matrix(r, theta, phi, radial_order=_default_radial_order,
            angular_rank=_default_angular_rank, zeta=_default_zeta):
-    """Returns the spherical polar Fourier observation matrix for a given set
-    of points represented by their spherical coordinates.
+    """Return the mSPF observation matrix at a set of q-space points.
 
     Parameters
     ----------
-    r : array-like, shape (K, )
-        The radii of the points in q-space where to compute the spherical 
-        function.
-    theta : array-like, shape (K, )
-        The polar angles of the points in q-space where to compute the 
-        spherical function.
-    phi : array-like, shape (K, )
-        The azimuthal angles of the points in q-space where to compute the 
-        spherical function.
+    r, theta, phi : array-like, shape (K,)
+        Spherical coordinates of the q-space points.
     radial_order : int
-        The radial truncation order of the SPF basis.
+        Radial truncation order of the SPF basis this is paired with.
     angular_rank : int
-        The truncation rank of the angular part of the SPF basis.
+        Truncation rank of the angular part.
     zeta : float
-        The scale parameter of the mSPF basis.
-    
+        Scale parameter of the basis.
+
     Returns
     -------
-    H : array-like, shape (K, R)
-        The observation matrix corresponding to the point set passed as input.
+    H : ndarray, shape (K, dimension(radial_order, angular_rank))
+        ``H[k, i]`` is basis function ``i`` evaluated at point ``k``.
     """
     K = r.shape[0]
     H = np.zeros((K, radial_order - 1, sh.dimension(angular_rank)))
@@ -120,11 +118,26 @@ def matrix(r, theta, phi, radial_order=_default_radial_order,
     return H.reshape(K, dimension(radial_order, angular_rank))
 
 
-def to_spf_matrix(radial_order=_default_radial_order, 
+def to_spf_matrix(radial_order=_default_radial_order,
                   angular_rank=_default_angular_rank, zeta=_default_zeta):
-    "Computes the transition matrix from modified SPF basis to SPF basis."
-    M = np.zeros((spf.dimension(radial_order, angular_rank), 
-               dimension(radial_order, angular_rank)))
+    """Return the transition matrix from mSPF coefficients to SPF coefficients.
+
+    Parameters
+    ----------
+    radial_order : int
+        Radial truncation order.
+    angular_rank : int
+        Truncation rank of the angular part.
+    zeta : float
+        Scale parameter of the basis.
+
+    Returns
+    -------
+    M : ndarray, shape (spf.dimension, dimension)
+        ``M @ mspf_coefficients`` gives the equivalent SPF coefficients.
+    """
+    M = np.zeros((spf.dimension(radial_order, angular_rank),
+                  dimension(radial_order, angular_rank)))
     for i in range(M.shape[0]):
         n_i = spf.index_n(i, radial_order, angular_rank)
         l_i = spf.index_l(i, radial_order, angular_rank)
@@ -135,7 +148,7 @@ def to_spf_matrix(radial_order=_default_radial_order,
             l_j = index_l(j, radial_order, angular_rank)
             m_j = index_m(j, radial_order, angular_rank)
             chi_nj = chi(zeta, n_j)
-            if (l_i == l_j and m_i == m_j):
+            if l_i == l_j and m_i == m_j:
                 if n_i <= n_j:
                     M[i, j] = 3 * chi_nj / (2 * kappa_ni)
                 else:
@@ -145,7 +158,7 @@ def to_spf_matrix(radial_order=_default_radial_order,
 
 
 def dimension(radial_order, angular_rank):
-    "Returns the dimension of the truncated mSPF basis."
+    """Return the dimension of the truncated mSPF basis."""
     return (radial_order - 1) * sh.dimension(angular_rank)
 
 
@@ -156,19 +169,37 @@ index_m = spf.index_m
 
 
 def chi(zeta, n):
-    "Returns the normalization constant of the mSPF basis."
-    return np.sqrt(2 / zeta**1.5 * factorial(n) / gamma(n + 3.5)) 
+    """Return the normalization constant of the mSPF radial function of order
+    ``n``."""
+    return np.sqrt(2 / zeta**1.5 * factorial(n) / gamma(n + 3.5))
 
 
 def radial_function(r, n, zeta):
-    "Computes the radial part of the mSPF basis."
+    """Evaluate the radial part of the mSPF basis of order ``n`` at radius
+    ``r``."""
     return genlaguerre(n, 2.5)(r**2 / zeta) * \
         r**2 / zeta * np.exp(- r**2 / (2 * zeta)) * chi(zeta, n)
 
 
 def Lambda(radial_order, angular_rank, zeta=_default_zeta):
-    """The Laplace regularization is computed by matrix multiplication 
-    (x-x0)^T Lambda (x-x0).
+    """Return the Laplace regularization matrix.
+
+    The regularization term is ``(x - x0)^T Lambda (x - x0)``, where ``x0`` is
+    given by :func:`v`.
+
+    Parameters
+    ----------
+    radial_order : int
+        Radial truncation order.
+    angular_rank : int
+        Truncation rank of the angular part.
+    zeta : float
+        Scale parameter of the basis.
+
+    Returns
+    -------
+    ndarray, shape (dimension, dimension)
+        Symmetric positive semi-definite matrix.
     """
     max_degree = 2 * (radial_order + 1)
     gammas = gamma(np.arange(max_degree) + 0.5)
@@ -182,19 +213,34 @@ def Lambda(radial_order, angular_rank, zeta=_default_zeta):
             chi2 = chi(zeta, n2)
             for j1 in range(dim_sh):
                 l1 = sh.index_l(j1)
-                coeffs = __Tcoeffs(n1, n2, l1)
+                coeffs = _T_coeffs(n1, n2, l1)
                 degree = coeffs.shape[0]
                 matrix_entry = chi1 * chi2 / (2 * np.sqrt(zeta)) * \
-                    np.dot(coeffs, gammas[range(degree-1, -1, -1)])
+                    np.dot(coeffs, gammas[range(degree - 1, -1, -1)])
                 for j2 in range(dim_sh):
-                    l2 = sh.index_l(j2)
                     if j1 == j2:
                         L[n1 * dim_sh + j1, n2 * dim_sh + j2] = matrix_entry
     return L
 
 
 def v(radial_order, angular_rank, zeta=_default_zeta):
-    "The vector x0 for Laplace regularization is -Lambda^-1 v."
+    """Return the vector ``v`` of the Laplace regularization.
+
+    The regularization minimum is at ``x0 = -Lambda^{-1} v``.
+
+    Parameters
+    ----------
+    radial_order : int
+        Radial truncation order.
+    angular_rank : int
+        Truncation rank of the angular part.
+    zeta : float
+        Scale parameter of the basis.
+
+    Returns
+    -------
+    ndarray, shape (dimension,)
+    """
     max_degree = 2 * (radial_order + 1)
     gammas = gamma(np.arange(max_degree) + 0.5)
 
@@ -204,16 +250,16 @@ def v(radial_order, angular_rank, zeta=_default_zeta):
 
     for n in range(radial_order - 1):
         chi1 = chi(zeta, n)
-        coeffs = __Tcoeffs(n, -1, 0)
+        coeffs = _T_coeffs(n, -1, 0)
         degree = coeffs.shape[0]
         v[n * dim_sh] = chi1 / (2 * np.sqrt(zeta)) \
-            * np.dot(coeffs, gammas[range(degree-1, -1, -1)])
+            * np.dot(coeffs, gammas[range(degree - 1, -1, -1)])
     return v
 
 
-def __F_n(n):
-    """F_n(q) = \chi_n \exp(-q^2 / 2\zeta) P_n(q)
-    and P_n(q) = q^2 / zeta * L_n^{5/2}(q^2 / zeta)"""
+def _F_n(n):
+    """Return the polynomial part of ``F_n(q) = chi_n exp(-q^2/2 zeta) P_n(q)``
+    with ``P_n(q) = q^2 / zeta * L_n^{5/2}(q^2 / zeta)``."""
     if n == -1:
         return np.poly1d([1.0])
     else:
@@ -221,30 +267,32 @@ def __F_n(n):
         return a * genlaguerre(n, 2.5)(a)
 
 
-def __diffFn(p):
-    """F_n'(q) = \chi_n \exp(-q^2 / 2\zeta) * 
-    (-q / \zeta * P_n(q) + P_n'(q))"""
+def _diff_F_n(p):
+    """Return the polynomial part of the derivative of ``F_n``, i.e.
+    ``-q/zeta P_n(q) + P_n'(q)``, in the same normalisation as :func:`_F_n`."""
     a = np.poly1d([-1, 0.0])
     return a * p + p.deriv()
 
 
-def __h_i_poly(n, l):
-    """h_i(q) =  \chi_n \exp(-q^2 / 2\zeta) * h_i_poly(q)"""
-    F0n = __F_n(n)
-    F1n = __diffFn(F0n)
-    F2n = __diffFn(F1n)
+def _h_i_poly(n, l):
+    """Return the polynomial ``h_i`` of the Laplace matrix, with
+    ``h_i(q) = chi_n exp(-q^2/2 zeta) * h_i_poly(q)``."""
+    F0n = _F_n(n)
+    F1n = _diff_F_n(F0n)
+    F2n = _diff_F_n(F1n)
     a = np.poly1d([1.0, 0.0])
-    b = (F0n / a)[0]         # Polynomial euclidian division
+    b = (F0n / a)[0]  # Polynomial Euclidean division: quotient.
     return a * F2n + 2 * F1n - l * (l + 1) * b
 
 
-def __Tcoeffs(ni, nj, l):
-    """The entry (i, j) of laplace matrix is 
-    $\chi_{n(i)}\chi_{n(j)} 
-    \int_0^\infty \exp(-q^2/\zeta) T_{i,j}(q^2/\zeta)\,\mathrm{d}q$.
-    This function returns the coefficients of T."""
-    Tij = __h_i_poly(ni, l) * __h_i_poly(nj, l)
+def _T_coeffs(ni, nj, l):
+    """Return the even-power coefficients of the integrand of the Laplace matrix.
+
+    The ``(i, j)`` entry is ``chi_{n(i)} chi_{n(j)} int_0^inf
+    exp(-q^2/zeta) T_{ij}(q^2/zeta) dq``; this returns the coefficients of
+    ``T_{ij}``.
+    """
+    Tij = _h_i_poly(ni, l) * _h_i_poly(nj, l)
     degree = Tij.coeffs.shape[0]
     coeffs = Tij.coeffs[range(0, degree, 2)]
     return coeffs
-

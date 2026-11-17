@@ -11,7 +11,6 @@ References
 """
 import numpy as np
 from abc import ABC, abstractmethod
-from qspace.sampling import multishell as ms
 from qspace.sampling import sphere
 import functools
 
@@ -83,8 +82,8 @@ class DTD(ABC):
 
 
     def size_variance(self):
-        """Computes the orientation parameter of the diffusion tensor 
-        distribution."""
+        """Computes the normalized size variance C_MD of the diffusion tensor
+        distribution (Westin et al., 2016)."""
         s = self.second_moment()
         d = voigt_6(self.first_moment())
         c = s - np.outer(d, d)
@@ -135,7 +134,7 @@ class DiscreteDTD(DTD):
             b_tensors = b_tensors[np.newaxis, :, :]
         tensorprods = np.einsum("ijk,ljk->il", self.tensors, b_tensors)
         signals = np.dot(self.weights, np.exp(-tensorprods))
-        return signals
+        return signals[0] if scalar else signals
 
 
 @functools.lru_cache()
@@ -249,38 +248,4 @@ def _sample_beta_distribution(mu, sigma, vmin=0, vmax=1, size=None):
     generator = np.random.default_rng()
     xs = generator.beta(_alpha, _beta, size)
     return xs * (c - a) + a
-
-
-if __name__ == "__main__":
-    from matplotlib import pyplot as plt
-    from scipy.stats import gaussian_kde
-    micro_fa = 0.5
-    nb_tensors = 100
-
-    estimated_c_mds = []
-    op = 0.5
-    gt_c_mds = np.linspace(0.1, 0.7, 4)
-    mean_md = 0.7e-3
-    min_md = 0.1e-3
-    max_md = 3.0e-3
-    fig = plt.figure(figsize=(12, 6))
-    ax1 = fig.add_subplot(1, 2, 1)
-    for gt_c_md in gt_c_mds:
-        dtd2 = dtd_from_op(op, nb_tensors, micro_fa, 
-                           mean_md=mean_md, min_md=min_md, max_md=max_md, 
-                           size_variance=gt_c_md)
-        estimated_c_mds.append(dtd2.size_variance())
-        mds = np.trace(dtd2.tensors, axis1=1, axis2=2) / 3
-        print(f"Mean MD: {np.mean(mds)}, min={np.min(mds)}, max={np.max(mds)}")
-        md_ticks = np.linspace(0, 3.0e-3, 100)
-        plt.plot(md_ticks, gaussian_kde(mds)(md_ticks), 
-                 label=f"$C_{{MD}}={gt_c_md:.2f}$")
-    plt.legend()
-
-    ax2 = fig.add_subplot(1, 2, 2)
-    plt.plot(gt_c_mds, estimated_c_mds)
-    plt.plot(gt_c_mds, gt_c_mds, "k--")
-    plt.xlabel("Ground truth $C_\mathrm{MD}$")
-    plt.ylabel("Estimated $C_\mathrm{MD}$")
-    plt.show()
 

@@ -1,10 +1,8 @@
 import numpy as np
-import numpy.testing as npt
+from numpy.testing import assert_, assert_equal, assert_almost_equal
 from qspace.bases import spf
 from qspace.sampling import sphere, space
-from numpy.testing import (assert_, assert_equal, assert_almost_equal,
-                           assert_array_almost_equal, run_module_suite,
-                           assert_array_equal)
+
 
 
 def test_spherical_polar_fourier():
@@ -47,7 +45,6 @@ def test_indices():
 
 def test_matrix():
     shell_radii = [1.0, 2.0, 3.0, 4.0, 5.0]
-    nb_shells = len(shell_radii)
     K_s = 64
     shell = sphere.jones(K_s)
     points = np.vstack([radius * shell for radius in shell_radii])
@@ -68,8 +65,3 @@ def test_matrix():
         if m != 0 or l > 2 or n > 1:
             assert_almost_equal(x[i], 0)
     assert_almost_equal(y, np.dot(H, x))
-
-
-if __name__ == '__main__':
-    run_module_suite()
-

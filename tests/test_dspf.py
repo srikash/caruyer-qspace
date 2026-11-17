@@ -1,10 +1,7 @@
 import numpy as np
-import numpy.testing as npt
-from qspace.bases import spf, dspf
-from qspace.sampling import sphere, space
-from numpy.testing import (assert_, assert_equal, assert_almost_equal,
-                           assert_array_almost_equal, run_module_suite,
-                           assert_array_equal)
+from numpy.testing import assert_, assert_equal, assert_array_almost_equal
+from qspace.bases import dspf
+
 
 
 def test_dual_spherical_polar_fourier():
@@ -43,8 +40,3 @@ def test_indices():
         assert_equal(l % 2, 0)
         assert_(np.abs(m) <= l)
         assert_(n < radial_order)
-
-
-if __name__ == '__main__':
-    run_module_suite()
-

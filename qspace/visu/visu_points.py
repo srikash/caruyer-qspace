@@ -1,17 +1,17 @@
-################################################
-# Author: Emmanuel Caruyer <caruyer@gmail.com> #
-#                                              #
-# Code to generate multiple-shell sampling     #
-# schemes, with optimal angular coverage. This #
-# implements the method described in Caruyer   #
-# et al., MRM 69(6), pp. 1534-1540, 2013.      #
-# This software comes with no warranty, etc.   #
-################################################
-from matplotlib import pyplot as plt
-from matplotlib import cm
-from mpl_toolkits.mplot3d import axes3d, art3d
+"""Matplotlib helpers to draw diffusion gradient directions on the sphere.
+
+Points are drawn as small discs lying on the sphere, coloured by shell (the
+shell radius is used for the colour map). Two views are provided:
+
+* :func:`draw_points_sphere` draws each shell in its own 3d subplot.
+* :func:`draw_points_reprojected` projects all shells onto a single unit
+  sphere.
+
+Used by the ``multishell`` and ``visu_btable`` commands.
+"""
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.mplot3d import art3d  # noqa: F401  (registers 3d projection)
 
 # Create a colormap for the b-values
 cm_dict = {'red':  ((0.0, 0.0, 0.0),
@@ -79,7 +79,7 @@ def draw_circles(positions, r=0.04):
     # a circle centered at [1, 0, 0] with radius r
     M = 20
     t = np.linspace(0, 2 * np.pi, M)
-    circleX = np.zeros((20, 3))
+    circleX = np.zeros((M, 3))
     circleX[:, 1] = r * np.cos(t)
     circleX[:, 2] = r * np.sin(t)
     
@@ -93,7 +93,7 @@ def draw_circles(positions, r=0.04):
     return circles
 
 
-def draw_points_reprojected(vects, S, Ks, rs, ax):
+def draw_points_reprojected(vects, S, Ks, rs=None, ax=None):
     """
     Draw the vectors on a unit sphere. 
 
@@ -108,12 +108,15 @@ def draw_points_reprojected(vects, S, Ks, rs, ax):
          shell radii. This is simply used for color mapping.
     ax : the matplolib axes instance to plot in.
     """
+    if ax is None:
+        raise ValueError("draw_points_reprojected needs a matplotlib 3d axes.")
+    if rs is None:
+        rs = np.linspace(0., 1., S + 1)[1:]
     indices = np.cumsum(Ks).tolist()
     indices.insert(0, 0)
 
-    v = np.asarray([0., 0., 1.])
     elev = 90
-    azim = 0  
+    azim = 0
     ax.view_init(azim=azim, elev=elev)
 
     # First plot sphere outline
@@ -176,10 +179,12 @@ def draw_points(vects, S, Ks, rs, ax, r_max=None):
          Shell radii.
     ax : the matplolib axes instance to plot in.
     """
-    v = np.asarray([0., 0., 1.])
     elev = 90
-    azim = 0  
+    azim = 0
     ax.view_init(azim=azim, elev=elev)
+
+    if rs is None:
+        rs = np.linspace(0., 1., S + 1)[1:]
 
     # Plot spheres outlines
     for r in rs:
@@ -187,9 +192,6 @@ def draw_points(vects, S, Ks, rs, ax, r_max=None):
 
     vects = np.copy(vects)
     vects[vects[:, 2] < 0] *= -1
-
-    if rs is None:
-        rs = np.linspace(0., 1., S + 1)[1:]
 
     indices = np.cumsum(Ks).tolist()
     indices.insert(0, 0)

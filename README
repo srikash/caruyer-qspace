@@ -1,5 +1,107 @@
 Tools for sampling and reconstruction in q-space diffusion MRI
 --------------------------------------------------------------
+
+qspace provides:
+
+* optimized multiple-shell and single-shell gradient sampling schemes
+  (`qspace.sampling`), with export to Siemens DVS, FSL and MRtrix formats;
+* spherical harmonics, SPF, dSPF and mSPF bases for q-space reconstruction
+  (`qspace.bases`);
+* gradient-waveform tools: b-tensors, waveform transforms and random
+  waveform generation (`qspace.sampling.waveforms`);
+* diffusion tensor distribution and Camino Monte-Carlo helpers
+  (`qspace.simul`); and
+* plotting helpers for gradient directions (`qspace.visu`).
+
+It requires Python 3.11 or later.
+
+Install
+-------
+From the repository root:
+
+    pip install .
+
+To read and write NIfTI images (needed by `mspf_fit`), install the optional
+extra:
+
+    pip install ".[nifti]"
+
+For development, install in editable mode with the test dependencies:
+
+    pip install -e ".[nifti,test]"
+
+Command-line tools
+------------------
+Each tool is installed as a command. Run any of them with `-h` for the full
+list of options.
+
+`multishell`: generate an optimized multiple-shell scheme. Writes
+`<basename>.txt` (one row per direction: shell index, then x y z) and two PNG
+figures.
+
+    multishell 16 32 48 --seed 0 -o scheme_3shells
+
+`create_dvs`: build a Siemens `.dvs` table from a shell scheme, with the
+b-value of each shell and a number of b=0 acquisitions. Add `-i` to interleave
+the b=0 acquisitions between batches of directions.
+
+    create_dvs scheme_3shells.txt 8 1000 2000 3000 -o scheme.dvs
+
+`visu_btable`: plot the directions of an FSL gradient table, one panel per
+shell. Use `-o` to save a figure instead of opening a window.
+
+    visu_btable -b scheme.bval -r scheme.bvec -o scheme.png
+
+`mspf_fit`: fit the mSPF basis to a diffusion-weighted 4d NIfTI image and save
+the marginal ODF as spherical-harmonic coefficients per voxel. Requires the
+`nifti` extra.
+
+    mspf_fit dwi.nii.gz -b dwi.bval -r dwi.bvec -m mask.nii.gz -o odf.nii.gz
+
+Python library
+--------------
+The functions below are the public interface. Module and function names are
+unchanged from earlier releases.
+
+    import numpy as np
+    from qspace.sampling import sphere, multishell, io
+
+    # 60 directions on the upper hemisphere (Koay) or 64 optimized directions
+    # (Jones, for small sets).
+    dirs = sphere.koay(60)
+    dirs = sphere.jones(64)
+
+    # Multiple-shell scheme: 16 directions on two shells, coupled together.
+    weights = multishell.compute_weights(2, [8, 8], [[0], [1], [0, 1]],
+                                         [1.0, 1.0, 1.0])
+    points = multishell.optimize(2, [8, 8], weights, init_points=None)
+
+    # Write a gradient table in several formats.
+    bvals = np.repeat([1000.0, 3000.0], 8)
+    io.write(bvals, points, "scheme.dvs", format="siemens")
+    io.write_fsl(bvals, points, "scheme")          # scheme.bval, scheme.bvec
+
+Pass `init_points` (or `--seed` on the command line) to make an optimized scheme
+reproducible.
+
+Tests
+-----
+The test suite uses pytest:
+
+    pip install ".[test]"
+    pytest
+
+Tests that need `nibabel` are skipped automatically when it is not installed.
+
+Development notes
+-----------------
+* Public functions and classes use NumPy-style docstrings.
+* The mSPF and dSPF formulas were ported to Python 3 but have not been
+  validated against an independent reference implementation; the test suite
+  only checks shapes, finiteness and internal consistency for dSPF.
+* Camino simulations (`qspace.simul.camino`) need Camino's `datasynth` on the
+  `PATH`, and raise a clear error if it is missing.
+
 Disclaimer
 ----------
 THERE IS NO WARRANTY FOR THE SAMPLING SCHEMES GENERATED WITH THIS TOOL, TO THE
@@ -10,12 +112,6 @@ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
 PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY OF THE SAMPLING SCHEME IS
 WITH YOU. SHOULD THE SAMPLING SCHEME PROVE DEFECTIVE, YOU ASSUME THE COST OF
 ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
-
-Install
--------
-To install,
-> cd qspace/
-> pip install .
 
 References
 ----------
@@ -29,4 +125,3 @@ Magnetic Resonance in Medicine 69, no. 6 (2013): 1534-1540.
 2. Caruyer, Emmanuel, and Rachid Deriche. "Diffusion MRI signal reconstruction
 with continuity constraint and optimal regularization." Medical Image Analysis
 16, no. 6 (2012): 1113-1120.
-
